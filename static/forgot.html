@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VSU Robotics Club – Forgot Password</title>
+  <style>
+    :root{
+      --orange:#F26623; --blue:#0B4EA2; --ink:#0f172a; --muted:#6b7280;
+      --border:#e5e7eb; --bg:#fafafa;
+      --logo:url("/app/img/vsu-logo.png");
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--ink)}
+    header{padding:22px 0 8px;border-bottom:3px solid var(--orange);
+      background:linear-gradient(#fff,rgba(255,255,255,.92))}
+    h1{margin:0 auto;text-align:center;max-width:840px}
+    .container{max-width:840px;margin:36px auto;padding:0 16px;position:relative}
+    .logo-mark{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+      opacity:.06;background-image:var(--logo);background-repeat:no-repeat;background-position:center;background-size:460px}
+    .card{position:relative;margin:auto;background:#fff;border:1px solid var(--border);
+      border-radius:16px;padding:18px 18px 24px;box-shadow:0 4px 24px rgba(0,0,0,.05);max-width:720px}
+    .circlogo{width:90px;height:90px;border-radius:50%;border:3px solid var(--blue);
+      background:#fff;background-image:var(--logo);background-size:90px;background-position:center;background-repeat:no-repeat;margin:-62px auto 6px}
+    .row{display:flex;gap:10px;margin:8px 0}
+    input{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px}
+    .btn{width:100%;padding:11px 12px;border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer}
+    .btn-orange{background:var(--orange)}
+    .btn-blue{background:var(--blue)}
+    .ghost{background:#fff;color:var(--ink);border:1px solid var(--border)}
+    .muted{color:var(--muted);font-size:.92rem}
+    pre{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto}
+  </style>
+</head>
+<body>
+<header><h1>Forgot your password?</h1></header>
+
+<div class="container">
+  <div class="logo-mark"><img src="virginia-state-trojans-logo.png"></div>
+
+  <div class="card">
+    
+    <p class="muted">
+      Password resets 
+    </p>
+
+    <div class="row"><input id="fp_username" placeholder="username (or email)" /></div>
+
+    <div class="row">
+      <button class="btn btn-orange" onclick="submitReset()">Request reset</button>
+    </div>
+    <div class="row">
+      <a class="btn btn-blue" href="/app/login.html" style="text-align:center;text-decoration:none;display:block;">Back to login</a>
+    </div>
+
+    <pre id="fp_out" class="muted"></pre>
+  </div>
+</div>
+
+<script>
+function apiBase(){ return localStorage.getItem('apiBase') || location.origin; }
+async function submitReset(){
+  const who = document.getElementById('fp_username').value.trim();
+  if(!who){ return out({error:'Please enter your username or email'}); }
+
+  // Placeholder behavior (no /auth/forgot endpoint on backend yet):
+  // You can wire this to your Messages API to alert admins if you want.
+  // For now, just show a confirmation to the user.
+  out({ok:true, message:`Reset request recorded for: ${who}. Please contact an admin to complete the reset.`});
+  alert("Thanks! An admin will help you reset your password.");
+}
+function out(x){ document.getElementById('fp_out').textContent = JSON.stringify(x, null, 2); }
+</script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VSU Robotics Club – TrojanTracks</title>
+<style>
+  :root {
+    --orange:#F26623; --blue:#1746A2;
+    --ink:#0f172a; --muted:#6b7280; --border:#e5e7eb; --bg:#fafafa;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); }
+  header { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:16px 20px; background:white; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
+  header h1 { font-size:18px; margin:0; font-weight:800 }
+  header .brand { display:flex; gap:10px; align-items:center; }
+  .pill { padding:6px 10px; border:1px solid var(--border); border-radius:999px; background:#fff; font-size:12px; }
+  .container { padding:20px; max-width:1200px; margin:0 auto; }
+  .grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); }
+  .card { background:white; border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; }
+  input, button, select, textarea { padding:10px 12px; border:1px solid var(--border); border-radius:10px; width:100%; }
+  textarea { min-height:84px; }
+  button { cursor:pointer; background:var(--orange); color:white; border:none; font-weight:700; }
+  button.ghost { background:white; color:var(--ink); border:1px solid var(--border); }
+  .muted { color: var(--muted); font-size: 0.92rem; }
+  pre { background:#f8f9fb; padding:12px; border-radius:10px; overflow:auto; }
+  .split { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width: 880px){ .split { grid-template-columns: 1fr; } }
+  .tabs { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+  .tab { display:flex; align-items:center; justify-content:flex-end; padding:12px; border-radius:9999px; color:#fff; font-weight:800; cursor:pointer; user-select:none }
+  .tab:nth-child(odd){ background:var(--orange); }
+  .tab:nth-child(even){ background:var(--blue); }
+  .hidden { display:none!important; }
+  .barWrap { background:#eee;border-radius:10px;overflow:hidden;height:14px; }
+  .bar { height:100%; width:0%; background:#22c55e; transition: width .2s ease-out; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="pill">TrojanTracks</span>
+    <h1>VSU Robotics Club</h1>
+  </div>
+  <div class="row" style="width:auto;gap:6px;">
+    <input id="apiBase" placeholder="API base" value="" style="width:260px" />
+    <button class="ghost" onclick="setApiBase()">Set</button>
+    <span id="authState" class="muted">signed out</span>
+    <button class="ghost" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Tabs (orange/blue stripes) -->
+  <div class="tabs">
+    <div class="tab" data-tab="people" onclick="switchTab(this)">People &amp; Teams</div>
+    <div class="tab" data-tab="projects" onclick="switchTab(this)">Projects</div>
+    <div class="tab" data-tab="board" onclick="switchTab(this)">Board &amp; Tasks</div>
+    <div class="tab" data-tab="progress" onclick="switchTab(this)">Progress</div>
+    <div class="tab" data-tab="status" onclick="switchTab(this)">Status</div>
+    <div class="tab" data-tab="messages" onclick="switchTab(this)">Messages</div>
+  </div>
+
+  <!-- PEOPLE & TEAMS -->
+  <section id="tab-people">
+    <div class="grid">
+      <div class="card">
+        <h3>Projects</h3>
+        <div class="row"><input id="p_name" placeholder="new project name" /></div>
+        <div class="row"><button onclick="createProject()">Create Project</button></div>
+        <div class="row"><input id="current_project_id" placeholder="current project id (for teams)" /></div>
+      </div>
+
+      <div class="card">
+        <h3>Teams in Project</h3>
+        <div class="row"><input id="t_name" placeholder="team name (e.g., Team A)" /></div>
+        <div class="row"><button onclick="createTeam()">Add Team</button></div>
+        <div class="row"><input id="t_project_id" placeholder="selected project id" /></div>
+      </div>
+
+      <div class="card">
+        <h3>Team Roster (selected team)</h3>
+        <div class="row"><input id="tm_user_id" placeholder="user id to add" /></div>
+        <div class="row">
+          <select id="tm_role">
+            <option value="MEMBER">MEMBER</option>
+            <option value="LEAD">LEAD</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+        </div>
+        <div class="row"><button onclick="addMember()">Add / Update Role</button></div>
+        <p class="muted">Use the Bench list to find people not yet on this project’s teams</p>
+      </div>
+
+      <div class="card">
+        <h3>Bench (not in this project)</h3>
+        <div class="row"><button class="ghost" onclick="loadBench()">Load Bench</button></div>
+        <pre id="bench_out"></pre>
+      </div>
+
+      <div class="card">
+        <h3>Bulk Assignment</h3>
+        <div class="row"><input id="bulk_task_id" placeholder="task id" /></div>
+        <div class="row"><input id="bulk_add" placeholder="user ids to ADD (comma-separated)" /></div>
+        <div class="row"><input id="bulk_remove" placeholder="user ids to REMOVE (comma-separated)" /></div>
+        <div class="row"><button onclick="bulkApply()">Apply</button></div>
+        <pre id="bulk_out"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROJECTS -->
+  <section id="tab-projects" class="hidden">
+    <div class="grid">
+      <div class="card">
+        <h3>Create Column (Lane)</h3>
+        <div class="row"><input id="c_name" placeholder="column name (e.g., To Do)" /></div>
+        <div class="row"><input id="c_project_id" placeholder="project id" /></div>
+        <div class="row"><button onclick="createColumn()">Create</button></div>
+        <pre id="c_out"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOARD & TASKS -->
+  <section id="tab-board" class="hidden">
+    <div class="grid">
+      <div class="card">
+        <h3>Create Task</h3>
+        <div class="row"><input id="task_title" placeholder="title" /></div>
+        <div class="row"><textarea id="task_desc" placeholder="description (optional)"></textarea></div>
+        <div class="row"><input id="task_project_id" placeholder="project id" /></div>
+        <div class="row"><input id="task_column_id" placeholder="column id (optional)" /></div>
+        <div class="row"><input id="task_assignees" placeholder="assignee ids (comma-separated)" /></div>
+        <div class="row"><button onclick="createTask()">Create Task</button></div>
+        <pre id="task_out"></pre>
+      </div>
+
+      <div class="card">
+        <h3>Complete My Part</h3>
+        <div class="row"><input id="ct_task_id" placeholder="task id" /></div>
+        <div class="row"><textarea id="ct_summary" placeholder="what did you complete? (required)"></textarea></div>
+        <div class="row"><button onclick="completeTaskMe()">Submit Completion</button></div>
+        <pre id="ct_out"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section id="tab-progress" class="hidden">
+    <div class="card">
+      <h3>Project Progress</h3>
+      <div class="row">
+        <input id="prog_project" placeholder="project id" />
+        <button onclick="loadProgress()">Load</button>
+      </div>
+      <div class="barWrap"><div id="bar" class="bar"></div></div>
+      <p id="bar_text" class="muted">0%</p>
+      <p class="muted">Live updates enabled while this tab is open.</p>
+    </div>
+  </section>
+
+  <!-- STATUS -->
+  <section id="tab-status" class="hidden">
+    <div class="card">
+      <h3>Status (By Completion)</h3>
+      <div class="row">
+        <input id="status_project" placeholder="project id" />
+        <button onclick="loadStatus()">Load Status</button>
+      </div>
+      <div class="split">
+        <div class="card">
+          <h4>Completed</h4>
+          <pre id="status_completed"></pre>
+        </div>
+        <div class="card">
+          <h4>Pending</h4>
+          <pre id="status_pending"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MESSAGES -->
+  <section id="tab-messages" class="hidden">
+    <div class="split">
+      <div class="card">
+        <h3>Post Message</h3>
+        <div class="row"><textarea id="m_text" placeholder="message text"></textarea></div>
+        <div class="row"><input id="m_project_id" placeholder="project id (optional for GLOBAL)" /></div>
+        <div class="row"><input id="m_team_id" placeholder="team id (optional)" /></div>
+        <div class="row"><input id="m_recipient_id" placeholder="recipient user id (optional)" /></div>
+        <div class="row"><button onclick="postMessage()">Post</button></div>
+        <p class="muted">Leave both Team and Recipient empty to post a GLOBAL message.</p>
+      </div>
+      <div class="card">
+        <h3>Inbox</h3>
+        <div class="row"><button class="ghost" onclick="loadInbox()">Refresh</button></div>
+        <div id="inbox"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* -- Gate: redirect to login if no token -- */
+if(!localStorage.getItem('token')) window.location.href = './login.html';
+
+/* - Basics - */
+const el = id => document.getElementById(id);
+function setApiBase(){
+  const v = el('apiBase').value.trim();
+  localStorage.setItem('apiBase', v || location.origin);
+}
+function apiBase(){ return localStorage.getItem('apiBase') || location.origin; }
+el('apiBase').value = apiBase();
+
+function authHeader(){
+  const t = localStorage.getItem('token');
+  return t ? {"Authorization":`Bearer ${t}`} : {};
+}
+function setState(){ el('authState').textContent = localStorage.getItem('token') ? 'signed in' : 'signed out'; }
+setState();
+function logout(){ localStorage.removeItem('token'); setState(); location.href='./login.html'; }
+
+function switchTab(btn){
+  const tab = btn.dataset.tab;
+  document.querySelectorAll('section[id^="tab-"]').forEach(s=>s.classList.add('hidden'));
+  const id = 'tab-'+(tab==='people'?'people':tab);
+  el(id).classList.remove('hidden');
+}
+
+/* - fetch helper - */
+async function fetchJSON(url, opts={}){
+  const r = await fetch(url, opts);
+  const txt = await r.text();
+  try { return JSON.parse(txt); } catch { return {raw:txt, status:r.status}; }
+}
+
+/* - People & Teams - */
+async function createProject(){
+  const j = await fetchJSON(`${apiBase()}/projects`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify({name: el('p_name').value.trim()}) });
+  alert(j.id ? 'Project created' : 'Error'); 
+}
+async function createTeam(){
+  const payload = { name: el('t_name').value.trim(), project_id: parseInt(el('t_project_id').value||el('current_project_id').value,10) };
+  const j = await fetchJSON(`${apiBase()}/teams`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify(payload) });
+  alert(j.id ? 'Team added' : (j.detail||'Error'));
+}
+async function addMember(){
+  const team_id = parseInt(prompt('Team ID?'),10);
+  const payload = { user_id: parseInt(el('tm_user_id').value,10), role: el('tm_role').value };
+  const j = await fetchJSON(`${apiBase()}/teams/${team_id}/members`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify(payload) });
+  alert(j.ok ? 'Added/Updated' : (j.detail||'Error'));
+}
+async function loadBench(){
+  const pid = parseInt(el('current_project_id').value||el('t_project_id').value,10);
+  const j = await fetchJSON(`${apiBase()}/projects/${pid}/people/bench`, { headers:{...authHeader()} });
+  el('bench_out').textContent = JSON.stringify(j, null, 2);
+}
+async function bulkApply(){
+  const id = parseInt(el('bulk_task_id').value,10);
+  const add = el('bulk_add').value.trim() ? el('bulk_add').value.split(',').map(s=>parseInt(s,10)) : null;
+  const rem = el('bulk_remove').value.trim() ? el('bulk_remove').value.split(',').map(s=>parseInt(s,10)) : null;
+  const j = await fetchJSON(`${apiBase()}/tasks/${id}/assignees`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify({add:add, remove:rem}) });
+  el('bulk_out').textContent = JSON.stringify(j, null, 2);
+}
+
+/* - Projects/Columns - */
+async function createColumn(){
+  const payload = { name: el('c_name').value.trim(), project_id: parseInt(el('c_project_id').value,10) };
+  const j = await fetchJSON(`${apiBase()}/columns`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify(payload) });
+  el('c_out').textContent = JSON.stringify(j, null, 2);
+}
+
+/* - Tasks - */
+async function createTask(){
+  const assignees = el('task_assignees').value.trim();
+  const payload = {
+    title: el('task_title').value.trim(),
+    description: el('task_desc').value.trim() || null,
+    project_id: parseInt(el('task_project_id').value,10),
+    column_id: el('task_column_id').value ? parseInt(el('task_column_id').value,10) : null,
+    assignee_ids: assignees ? assignees.split(',').map(s=>parseInt(s,10)) : null
+  };
+  const j = await fetchJSON(`${apiBase()}/tasks`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify(payload) });
+  el('task_out').textContent = JSON.stringify(j, null, 2);
+}
+async function completeTaskMe(){
+  const id = parseInt(el('ct_task_id').value,10);
+  const summary = el('ct_summary').value.trim();
+  const j = await fetchJSON(`${apiBase()}/tasks/${id}/complete/me`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify({summary}) });
+  el('ct_out').textContent = JSON.stringify(j, null, 2);
+}
+
+/* - Progress + WS - */
+let ws;
+function setBar(p){ el('bar').style.width = `${p}%`; el('bar_text').textContent = `${p}%`; }
+async function loadProgress(){
+  const pid = parseInt(el('prog_project').value,10);
+  const j = await fetchJSON(`${apiBase()}/projects/${pid}/progress`, { headers: authHeader() });
+  setBar(j.percent || 0);
+  if(ws){ ws.close(); }
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${scheme}://${location.host}/ws/projects/${pid}`);
+  ws.onmessage = (e)=>{ const m = JSON.parse(e.data); if(m.type==='progress') setBar(m.percent); };
+}
+
+/* - Status - */
+async function loadStatus(){
+  const pid = parseInt(el('status_project').value,10);
+  const j = await fetchJSON(`${apiBase()}/projects/${pid}/tasks/status`, { headers:{...authHeader()} });
+  el('status_completed').textContent = JSON.stringify(j.completed || [], null, 2);
+  el('status_pending').textContent = JSON.stringify(j.pending || [], null, 2);
+}
+
+/* - Messages - */
+async function postMessage(){
+  const payload = {
+    text: el('m_text').value.trim(),
+    project_id: el('m_project_id').value ? parseInt(el('m_project_id').value,10) : null,
+    team_id: el('m_team_id').value ? parseInt(el('m_team_id').value,10) : null,
+    recipient_user_id: el('m_recipient_id').value ? parseInt(el('m_recipient_id').value,10) : null
+  };
+  const j = await fetchJSON(`${apiBase()}/messages`, { method:'POST', headers:{'Content-Type':'application/json', ...authHeader()}, body: JSON.stringify(payload) });
+  alert(j.id ? 'Message posted!' : 'Error posting'); 
+}
+async function loadInbox(){
+  const j = await fetchJSON(`${apiBase()}/messages/inbox`, { headers:{...authHeader()} });
+  const box = el('inbox'); box.innerHTML = '';
+  j.forEach(m=>{
+    const d = document.createElement('div');
+    d.className='card';
+    d.innerHTML = `<strong>[${m.scope}]</strong> ${escapeHtml(m.text)}<br><span class="muted">${new Date(m.created_at).toLocaleString()}</span>`;
+    box.appendChild(d);
+  });
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: trojantracks-api
+    env: python
+    rootDir: api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: ALLOW_ORIGINS
+        value: https://trojantracks.onrender.com,http://localhost:3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trojantracks-db
+          property: connectionString
+
+databases:
+  - name: trojantracks-db
+    plan: free

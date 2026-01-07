@@ -1,0 +1,18 @@
+.circlogo {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;               /* makes the circle */
+  border: 3px solid var(--blue);    /* blue outline */
+  background: #fff;                 /* white background */
+  display: flex;                    /* centers the logo */
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;                 /* keeps image clipped inside */
+  margin: -62px auto 6px;           /* positions it above card */
+}
+
+.circlogo img {
+  width: 100%;                      /* make logo fill circle */
+  height: 100%;
+  object-fit: contain;              /* keeps proportions without stretching */
+}

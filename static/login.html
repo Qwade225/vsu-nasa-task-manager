@@ -1,0 +1,136 @@
+<!-- static/login.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VSU Robotics Club – Login</title>
+  <link rel="stylesheet" href="login.css">
+  <style>
+    :root{
+      --orange:#F26623;
+      --blue:#0B4EA2;
+      --ink:#0f172a;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --bg:#fafafa;
+      --logo:url("/app/img/vsu-logo.png"); /* path to your logo */
+    }
+
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:var(--ink)}
+
+    header{padding:22px 0 8px;border-bottom:3px solid var(--orange);
+      background:linear-gradient(#fff,rgba(255,255,255,.92))}
+    h1{margin:0 auto;text-align:center;max-width:840px}
+
+    .container{max-width:840px;margin:36px auto;padding:0 16px;position:relative}
+    .logo-mark{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+      opacity:.06;background-image:var(--logo);background-repeat:no-repeat;
+      background-position:center;background-size:460px}
+
+    .card{position:relative;margin:auto;background:#fff;border:1px solid var(--border);
+      border-radius:16px;padding:18px 18px 24px;box-shadow:0 4px 24px rgba(0,0,0,.05);
+      max-width:720px}
+
+    .circlogo{width:90px;height:90px;border-radius:50%;border:3px solid var(--blue);
+      background:#fff;background-image:var(--logo);background-size:90px;
+      background-position:center;background-repeat:no-repeat;margin:-62px auto 6px}
+
+    .row{display:flex;gap:10px;margin:8px 0}
+    input{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px}
+    a.link{display:inline-block;margin:6px 0 2px;color:var(--blue);text-decoration:underline}
+
+    .btn{width:100%;padding:11px 12px;border:none;border-radius:10px;color:#fff;
+      font-weight:700;cursor:pointer}
+    .btn-orange{background:var(--orange)}
+    .btn-blue{background:var(--blue)}
+
+    .muted{color:var(--muted);font-size:.92rem}
+    pre{background:#f8fafc;border:1px solid var(--border);border-radius:10px;
+      padding:12px;overflow:auto}
+  </style>
+</head>
+<body>
+<header><h1>Welcome to VSU Robotics Club Task Manager</h1></header>
+
+<div class="container">
+  <div class="logo-mark"><img src="virginia-state-trojans-logo.png"></div>
+    
+<!--CSS style for the circle logo-->
+
+  <div class="card">
+    <div class="circlogo">
+        <img src="virginia-state-trojans-logo.png" alt="VSU-Logo">
+    </div>
+    <h3>Sign in or Create Login</h3>
+
+    <div class="row"><input id="l_user" placeholder="username" /></div>
+    <div class="row"><input id="l_pass" placeholder="password" type="password" /></div>
+
+    <a class="link" href="/app/forgot.html">Forgot password</a>
+
+    <div class="row"><button class="btn btn-orange" onclick="login()">Login</button></div>
+    <div class="row">
+      <a class="btn btn-blue" href="/app/register.html"
+         style="text-align:center;text-decoration:none;display:block;">New user</a>
+    </div>
+
+    <p class="muted">The very first registered user becomes an admin automatically.</p>
+    <pre id="l_out" class="muted"></pre>
+  </div>
+</div>
+
+<div class="notice info" role="note" aria-label="First-time login instructions">
+  <strong>First-time login:</strong>
+  Your <em>username</em> is your email address. Your temporary <em>password</em> is the part of your email
+  <em>before</em> the “@” symbol.<br>
+  <small>Example: <code>jan####@vsu.edu</code> → password: <code>jan####</code></small>
+</div>
+
+<script>
+  const API_BASE = "http://127.0.0.1:8000/api";
+
+  // Hook up navigation (no layout changes)
+  document.getElementById("btnForgot")?.addEventListener("click", function (e) {
+    e.preventDefault();
+    window.location.href = "./forgot.html";
+  });
+
+  document.getElementById("btnRegister")?.addEventListener("click", function (e) {
+    e.preventDefault();
+    window.location.href = "./register.html";
+  });
+
+  // Handle login submit (POSTer = this is your POST request)
+  document.getElementById("loginForm")?.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const username = document.getElementById("username")?.value?.trim();
+    const password = document.getElementById("password")?.value || "";
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Login failed");
+
+      // Save session and go to Task Manager
+      localStorage.setItem("ttoken", data.access_token);
+      localStorage.setItem("tuser", data.username);
+      localStorage.setItem("trole", data.role);
+      window.location.href = "./task_manager.html";
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+</script>
+
+
+
+</body>
+</html>

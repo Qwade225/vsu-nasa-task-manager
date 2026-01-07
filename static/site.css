@@ -1,0 +1,18 @@
+.notice{
+  border:1px solid var(--border);
+  background:#f8fafc;
+  padding:10px 12px;
+  border-radius:10px;
+  font-size:.95rem;
+}
+.notice.info{
+  border-color:#bfdbfe;
+  background:#eff6ff;
+  color:#1e3a8a;
+}
+.notice code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding:0 4px;
+  border-radius:6px;
+  background:#e5e7eb;
+}
