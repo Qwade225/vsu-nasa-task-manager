@@ -14,9 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, ConfigDict
-from passlib.hash import bcrypt
+from passlib.context import CryptContext
 from sqlalchemy import (
-    String, Text, Boolean, ForeignKey, func, select, delete, update, Integer,
+    String, Text, Boolean, ForeignKey, func, select, delete, Integer,
     UniqueConstraint, or_, Float
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
@@ -47,8 +47,6 @@ def _now_utc() -> datetime:
 # --------------------------
 # App & CORS
 # --------------------------
-# NEW:
-# Serve static files (CSS, images)
 app = FastAPI(title="TrojanTracks API – Teams/Tasks/Messages")
 
 app.add_middleware(
@@ -62,8 +60,6 @@ app.add_middleware(
 # Serve static files (if they exist)
 if os.path.isdir("../static"):
     app.mount("/static", StaticFiles(directory="../static"), name="static")
-# Serve static UI at /app (if folder exists)
-# app.mount("/app", StaticFiles(directory="static", html=True), name="static")
 
 
 # --------------------------
@@ -108,7 +104,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     key: Mapped[str] = mapped_column(String(10), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    
+
     columns: Mapped[List["Column"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     teams: Mapped[List["Team"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     tasks: Mapped[List["Task"]] = relationship(back_populates="project", cascade="all, delete-orphan")
@@ -119,7 +115,7 @@ class Team(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(120), index=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
-    
+
     project: Mapped["Project"] = relationship(back_populates="teams")
     members: Mapped[List["TeamMember"]] = relationship(back_populates="team", cascade="all, delete-orphan")
 
@@ -130,10 +126,10 @@ class TeamMember(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(20), default="member")  # member, lead
-    
+
     team: Mapped["Team"] = relationship(back_populates="members")
     user: Mapped["User"] = relationship(back_populates="memberships")
-    
+
     __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_user"),)
 
 
@@ -143,7 +139,7 @@ class Column(Base):
     name: Mapped[str] = mapped_column(String(50), index=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
     order: Mapped[int] = mapped_column(Integer, default=0)
-    
+
     project: Mapped["Project"] = relationship(back_populates="columns")
     tasks: Mapped[List["Task"]] = relationship(back_populates="column", cascade="all, delete-orphan")
 
@@ -159,7 +155,7 @@ class Task(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     rank: Mapped[Optional[float]] = mapped_column(Float, default=1000.0)
-    
+
     project: Mapped["Project"] = relationship(back_populates="tasks")
     column: Mapped[Optional["Column"]] = relationship(back_populates="tasks")
     assignees: Mapped[List["TaskAssignee"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -173,10 +169,10 @@ class TaskAssignee(Base):
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     completed_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     task: Mapped["Task"] = relationship(back_populates="assignees")
     user: Mapped["User"] = relationship(back_populates="task_assignments")
-    
+
     __table_args__ = (UniqueConstraint("task_id", "user_id", name="uq_task_user"),)
 
 
@@ -190,7 +186,7 @@ class Message(Base):
     team_id: Mapped[Optional[int]] = mapped_column(ForeignKey("teams.id", ondelete="CASCADE"), nullable=True)
     recipient_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    
+
     sender: Mapped["User"] = relationship(foreign_keys=[sender_id], back_populates="messages_sent")
 
 
@@ -213,13 +209,15 @@ class UserOut(BaseModel):
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
-    password: str = Field(min_length=6, max_length=128)
+    # bcrypt effectively uses 72 bytes; enforce 72 chars here to stop crashes in practice
+    password: str = Field(min_length=6, max_length=72)
     email: Optional[str] = None
 
 
 class PasswordChangeIn(BaseModel):
-    old_password: str
-    new_password: str = Field(min_length=6, max_length=128)
+    # keep consistent with bcrypt limit to avoid runtime errors
+    old_password: str = Field(min_length=6, max_length=72)
+    new_password: str = Field(min_length=6, max_length=72)
 
 
 class ForgotIn(BaseModel):
@@ -228,7 +226,7 @@ class ForgotIn(BaseModel):
 
 class ResetIn(BaseModel):
     token: str = Field(min_length=8, max_length=256)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=72)
 
 
 class ProjectCreate(BaseModel):
@@ -335,15 +333,25 @@ class MessageOut(BaseModel):
 # --------------------------
 # Auth helpers
 # --------------------------
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# IMPORTANT:
+# - For /auth/register we do NOT want forced auth.
+# - For protected endpoints we DO require auth.
+#
+# auto_error=False lets us "optionally" accept a token in endpoints that want it.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(pw: str) -> str:
-    return bcrypt.hash(pw)
+    # Safety: bcrypt uses 72 bytes; keep hard stop here too.
+    if len(pw.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be 72 bytes or less")
+    return pwd_context.hash(pw)
 
 
 def verify_password(pw: str, hashed: str) -> bool:
-    return bcrypt.verify(pw, hashed)
+    return pwd_context.verify(pw, hashed)
 
 
 def create_access_token(data: dict, minutes: int = ACCESS_MIN) -> str:
@@ -352,13 +360,18 @@ def create_access_token(data: dict, minutes: int = ACCESS_MIN) -> str:
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALG)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+async def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+    # Protected endpoints MUST have a token
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     cred_exc = HTTPException(status_code=401, detail="Could not validate credentials")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         uid = int(payload.get("sub", 0))
     except JWTError:
         raise cred_exc
+
     user = await db.scalar(select(User).where(User.id == uid))
     if not user:
         raise cred_exc
@@ -401,12 +414,12 @@ class ConnectionHub:
         self.connections[project_id].append(ws)
 
     def disconnect(self, project_id: int, ws: WebSocket):
-        if project_id in self.connections:
+        if project_id in self.connections and ws in self.connections[project_id]:
             self.connections[project_id].remove(ws)
 
     async def broadcast(self, project_id: int, message: dict):
         if project_id in self.connections:
-            for ws in self.connections[project_id]:
+            for ws in list(self.connections[project_id]):
                 try:
                     await ws.send_json(message)
                 except:
@@ -444,29 +457,29 @@ async def whoami(user: User = Depends(get_current_user)) -> UserOut:
 
 
 @app.post("/auth/register", response_model=UserOut, status_code=201)
-async def register(
-    payload: UserCreate,
-    token: Optional[str] = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
-) -> UserOut:
-    count = await db.scalar(select(func.count()).select_from(User))
-    if count and count > 0:
-        if not token:
-            raise HTTPException(401, "Admin token required")
-        try:
-            payload_jwt = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-            uid = int(payload_jwt.get("sub", 0))
-            requester = await db.scalar(select(User).where(User.id == uid))
-            if not requester or not requester.is_admin:
-                raise HTTPException(403, "Admin only")
-        except JWTError:
-            raise HTTPException(401, "Invalid token")
+async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> UserOut:
+    # First user becomes admin (bootstrap). After that, use /users endpoints (admin-only).
+    count = int((await db.scalar(select(func.count()).select_from(User))) or 0)
+    if count > 0:
+        raise HTTPException(
+            status_code=401,
+            detail="Registration is closed. Admin must create users via /users endpoints."
+        )
+
+    # Normalize email and username
+    username = payload.username.strip()
+    email = payload.email.strip().lower() if payload.email else None
+
+    # Prevent duplicates (clean error instead of DB crash)
+    existing = await db.scalar(select(User).where(or_(User.username == username, User.email == email) if email else (User.username == username)))
+    if existing:
+        raise HTTPException(status_code=400, detail="Username or email already exists")
 
     user = User(
-        username=payload.username,
+        username=username,
         password_hash=hash_password(payload.password),
-        email=payload.email,
-        is_admin=(count == 0),
+        email=email,
+        is_admin=True,
     )
     db.add(user)
     await db.commit()
@@ -476,12 +489,13 @@ async def register(
 
 @app.post("/auth/login", response_model=TokenOut)
 async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)) -> TokenOut:
-    who = form.username.strip()
-    user = await db.scalar(
-        select(User).where(or_(User.username == who, User.email == who.lower()))
-    )
+    who = (form.username or "").strip()
+    who_l = who.lower()
+
+    user = await db.scalar(select(User).where(or_(User.username == who, User.email == who_l)))
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Invalid credentials")
+
     token = create_access_token({"sub": str(user.id)})
     return TokenOut(access_token=token)
 
@@ -490,6 +504,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = 
 async def change_password(payload: PasswordChangeIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if not verify_password(payload.old_password, user.password_hash):
         raise HTTPException(400, "Old password is incorrect")
+
     user.password_hash = hash_password(payload.new_password)
     await db.commit()
     return {"ok": True}
@@ -517,6 +532,7 @@ async def reset_password(payload: ResetIn, db: AsyncSession = Depends(get_db)):
             user.reset_token_expires = None
             await db.commit()
         raise HTTPException(status_code=400, detail="Invalid or expired token")
+
     user.password_hash = hash_password(payload.new_password)
     user.reset_token = None
     user.reset_token_expires = None
@@ -546,7 +562,15 @@ async def list_users(
 
 @app.post("/users", response_model=UserOut, status_code=201)
 async def admin_create_user(payload: UserCreate, _: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> UserOut:
-    user = User(username=payload.username, password_hash=hash_password(payload.password), email=payload.email)
+    username = payload.username.strip()
+    email = payload.email.strip().lower() if payload.email else None
+
+    # Duplicate check
+    existing = await db.scalar(select(User).where(or_(User.username == username, User.email == email) if email else (User.username == username)))
+    if existing:
+        raise HTTPException(status_code=400, detail="Username or email already exists")
+
+    user = User(username=username, password_hash=hash_password(payload.password), email=email, is_admin=False)
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -621,7 +645,8 @@ async def bench_people(project_id: int, user: User = Depends(get_current_user), 
         .join(Team, Team.id == TeamMember.team_id)
         .where(Team.project_id == project_id)
     )
-    res = await db.execute(select(User).where(User.id.not_in(in_team_ids)).order_by(User.username))
+    # SQLAlchemy "NOT IN" needs ~in_()
+    res = await db.execute(select(User).where(~User.id.in_(in_team_ids)).order_by(User.username))
     return list(res.scalars().all())
 
 
@@ -699,7 +724,7 @@ async def delete_column(column_id: int, user: User = Depends(get_current_user), 
 
 
 # --------------------------
-# Tasks
+# Tasks-
 # --------------------------
 def _task_to_out(task: Task) -> TaskOut:
     aouts: List[TaskAssigneeOut] = []
@@ -734,7 +759,10 @@ async def _refresh_task_completion(task: Task, db: AsyncSession) -> None:
         return
 
     done = int((await db.scalar(
-        select(func.count()).select_from(TaskAssignee).where(TaskAssignee.task_id == task.id, TaskAssignee.is_completed == True)
+        select(func.count()).select_from(TaskAssignee).where(
+            TaskAssignee.task_id == task.id,
+            TaskAssignee.is_completed == True
+        )
     )) or 0)
 
     if done == total:
@@ -812,7 +840,7 @@ async def update_task(task_id: int, payload: TaskCreate, user: User = Depends(ge
     if not task:
         raise HTTPException(404, "Task not found")
     await require_admin_or_lead_for_project(task.project_id, user, db)
-    
+
     task.title = payload.title
     task.description = payload.description
     task.column_id = payload.column_id
@@ -994,7 +1022,7 @@ async def websocket_endpoint(websocket: WebSocket, project_id: int):
     await hub.connect(project_id, websocket)
     try:
         while True:
-            data = await websocket.receive_text()
+            _ = await websocket.receive_text()
     except WebSocketDisconnect:
         hub.disconnect(project_id, websocket)
 
@@ -1005,3 +1033,4 @@ async def websocket_endpoint(websocket: WebSocket, project_id: int):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)
+
